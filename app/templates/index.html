@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Territories · Commercial Intelligence{% endblock %}
+{% block content %}
+<p class="eyebrow">Latest year · all territories</p>
+<h1>Territory performance</h1>
+<p class="sub">Claim volume, spend and year-over-year momentum for every sales territory. Select a territory to drill down.</p>
+
+<div class="kpis" id="kpis"><div class="loading">Loading…</div></div>
+
+<div class="card">
+  <h2>Territories ranked by claim volume</h2>
+  <div id="table-wrap"><div class="loading">Loading…</div></div>
+</div>
+
+<div class="card">
+  <h2>Decile concentration — why targeting matters</h2>
+  <canvas id="decileChart" aria-label="Share of claims by prescriber decile" role="img"></canvas>
+  <p class="note" id="decile-note"></p>
+</div>
+
+<script>
+(async () => {
+  const [{ territories }, deciles] = await Promise.all([
+    getJSON("/api/territories"),
+    getJSON("/api/insights/deciles"),
+  ]);
+
+  const totClaims = territories.reduce((s, t) => s + t.claims, 0);
+  const totCost = territories.reduce((s, t) => s + t.drug_cost, 0);
+  const totRx = territories.reduce((s, t) => s + t.prescribers, 0);
+  document.getElementById("kpis").innerHTML = `
+    <div class="kpi"><div class="label">Territories</div><div class="value">${territories.length}</div></div>
+    <div class="kpi"><div class="label">Prescribers</div><div class="value">${num(totRx)}</div></div>
+    <div class="kpi"><div class="label">Claims (latest yr)</div><div class="value">${num(totClaims)}</div></div>
+    <div class="kpi"><div class="label">Drug spend</div><div class="value">${money(totCost)}</div></div>
+    <div class="kpi"><div class="label">Top-3 decile share</div><div class="value">${deciles.top3_decile_claims_share_pct}%</div></div>`;
+
+  const rows = territories.map(t => `
+    <tr>
+      <td class="num">${t.claims_rank}</td>
+      <td><a class="row-link" href="/territory/${t.territory_id}">${t.territory_name}</a></td>
+      <td>${t.state}</td>
+      <td>${t.rep_name}</td>
+      <td class="num">${num(t.prescribers)}</td>
+      <td class="num">${num(t.claims)}</td>
+      <td class="num">${money(t.drug_cost)}</td>
+      <td class="num"><span class="delta ${t.claims_yoy_pct >= 0 ? "up" : "down"}">
+        ${t.claims_yoy_pct == null ? "—" : (t.claims_yoy_pct >= 0 ? "+" : "") + t.claims_yoy_pct + "%"}</span></td>
+    </tr>`).join("");
+  document.getElementById("table-wrap").innerHTML = `
+    <table>
+      <thead><tr><th class="num">#</th><th>Territory</th><th>State</th><th>Rep</th>
+      <th class="num">Prescribers</th><th class="num">Claims</th>
+      <th class="num">Spend</th><th class="num">YoY</th></tr></thead>
+      <tbody>${rows}</tbody></table>`;
+
+  const buckets = deciles.deciles;
+  new Chart(document.getElementById("decileChart"), {
+    type: "bar",
+    data: {
+      labels: buckets.map(b => "D" + b.decile),
+      datasets: [{
+        label: "% of total claims",
+        data: buckets.map(b => b.claims_share_pct),
+        backgroundColor: buckets.map(b =>
+          b.decile >= 9 ? chartDefaults.amber :
+          b.decile >= 6 ? "#e0a33e" : "#7fbfb4"),
+        borderRadius: 3,
+      }],
+    },
+    options: baseChartOpts(),
+  });
+  document.getElementById("decile-note").textContent =
+    `The top 3 deciles account for ${deciles.top3_decile_claims_share_pct}% of all claim volume — ` +
+    `the concentration that makes decile-based call planning worthwhile.`;
+})().catch(e => { document.getElementById("table-wrap").innerHTML =
+  `<p class="note">Could not load data (${e.message}). Did you run the ETL scripts?</p>`; });
+</script>
+{% endblock %}

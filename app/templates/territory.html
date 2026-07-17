@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Territory · Commercial Intelligence{% endblock %}
+{% block content %}
+<p class="eyebrow">Territory drilldown</p>
+<h1 id="t-name">Loading…</h1>
+<p class="sub" id="t-sub"></p>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="grid-2">
+  <div class="card">
+    <h2>Claims trend</h2>
+    <canvas id="trendChart" aria-label="Yearly claims trend" role="img"></canvas>
+  </div>
+  <div class="card">
+    <h2>Top drugs (latest year)</h2>
+    <div id="drugs-wrap"><div class="loading">Loading…</div></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Call-plan simulator</h2>
+  <p class="note" style="margin-top:0">Allocate a rep's call capacity from decile 10 downward and see what share of territory volume the plan reaches.</p>
+  <div class="controls">
+    <label>Calls available
+      <input type="number" id="calls" value="60" min="1" max="10000"></label>
+    <label>Calls per prescriber
+      <input type="number" id="cpp" value="2" min="1" max="20"></label>
+    <button class="primary" id="run">Run simulation</button>
+    <span class="badge" id="coverage" hidden></span>
+  </div>
+  <div id="plan-wrap"></div>
+</div>
+
+<p><a class="row-link" href="/">← All territories</a></p>
+
+<script>
+const TID = {{ territory_id }};
+
+async function loadTerritory() {
+  const d = await getJSON(`/api/territories/${TID}/performance`);
+  const t = d.territory;
+  document.getElementById("t-name").textContent = t.territory_name;
+  document.getElementById("t-sub").textContent =
+    `${t.state} · ${t.region} · Rep: ${t.rep_name}`;
+
+  const latest = d.trend[d.trend.length - 1] || { claims: 0, drug_cost: 0 };
+  document.getElementById("kpis").innerHTML = `
+    <div class="kpi"><div class="label">Prescribers</div><div class="value">${num(t.prescribers)}</div></div>
+    <div class="kpi"><div class="label">Claims (latest yr)</div><div class="value">${num(latest.claims)}</div></div>
+    <div class="kpi"><div class="label">Drug spend</div><div class="value">${money(latest.drug_cost)}</div></div>`;
+
+  new Chart(document.getElementById("trendChart"), {
+    type: "line",
+    data: { labels: d.trend.map(r => r.year),
+      datasets: [{ label: "claims", data: d.trend.map(r => r.claims),
+        borderColor: chartDefaults.teal, backgroundColor: chartDefaults.teal,
+        tension: .25, pointRadius: 4 }] },
+    options: baseChartOpts(),
+  });
+
+  document.getElementById("drugs-wrap").innerHTML = `
+    <table><thead><tr><th>Brand</th><th>Class</th>
+    <th class="num">Claims</th><th class="num">Spend</th></tr></thead><tbody>
+    ${d.top_drugs.map(r => `<tr><td>${r.brand_name}</td><td>${r.drug_class}</td>
+      <td class="num">${num(r.claims)}</td><td class="num">${money(r.drug_cost)}</td></tr>`).join("")}
+    </tbody></table>`;
+}
+
+async function runPlan() {
+  const body = {
+    territory_id: TID,
+    calls_available: +document.getElementById("calls").value,
+    calls_per_prescriber: +document.getElementById("cpp").value,
+  };
+  const r = await fetch("/api/insights/call-plan", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const d = await r.json();
+  const badge = document.getElementById("coverage");
+  badge.hidden = false;
+  badge.textContent = `covers ${d.claims_coverage_pct}% of territory claims`;
+  document.getElementById("plan-wrap").innerHTML = `
+    <table><thead><tr><th class="num">Decile</th><th class="num">Prescribers</th>
+    <th class="num">Reached</th><th class="num">Decile claims</th></tr></thead><tbody>
+    ${d.allocation.map(a => `<tr><td class="num">${a.decile}</td>
+      <td class="num">${a.prescribers}</td><td class="num">${a.prescribers_reached}</td>
+      <td class="num">${num(a.decile_claims)}</td></tr>`).join("")}
+    </tbody></table>
+    <p class="note">${d.note}</p>`;
+}
+
+document.getElementById("run").addEventListener("click", () =>
+  runPlan().catch(e => alert(e.message)));
+loadTerritory().catch(e => {
+  document.getElementById("t-name").textContent = "Territory not found";
+  document.getElementById("t-sub").textContent = e.message;
+});
+</script>
+{% endblock %}

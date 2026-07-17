@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Targeting · Commercial Intelligence{% endblock %}
+{% block content %}
+<p class="eyebrow">Prescriber targeting</p>
+<h1>Who should the reps call?</h1>
+<p class="sub">Every prescriber, deciled nationally by latest-year claim volume (NTILE 10 — decile 10 is the top ~10%). Filter to build a call list.</p>
+
+<div class="controls">
+  <label>Territory <select id="f-territory"><option value="">All</option></select></label>
+  <label>Specialty <select id="f-specialty"><option value="">All</option></select></label>
+  <label>Min decile <select id="f-decile"></select></label>
+</div>
+
+<div class="card">
+  <div id="table-wrap"><div class="loading">Loading…</div></div>
+</div>
+
+<script>
+const decSel = document.getElementById("f-decile");
+for (let d = 1; d <= 10; d++) {
+  const o = document.createElement("option");
+  o.value = d; o.textContent = "≥ " + d;
+  if (d === 7) o.selected = true;
+  decSel.appendChild(o);
+}
+
+async function initFilters() {
+  const { territories } = await getJSON("/api/territories");
+  const tSel = document.getElementById("f-territory");
+  territories.forEach(t => {
+    const o = document.createElement("option");
+    o.value = t.territory_id; o.textContent = t.territory_name;
+    tSel.appendChild(o);
+  });
+  const specs = ["Internal Medicine","Family Practice","Cardiology","Endocrinology",
+                 "Psychiatry","Neurology","Nurse Practitioner","Physician Assistant"];
+  const sSel = document.getElementById("f-specialty");
+  specs.forEach(s => { const o = document.createElement("option");
+    o.value = s; o.textContent = s; sSel.appendChild(o); });
+}
+
+async function load() {
+  const t = document.getElementById("f-territory").value;
+  const s = document.getElementById("f-specialty").value;
+  const d = decSel.value;
+  const qs = new URLSearchParams({ min_decile: d, limit: 100 });
+  if (t) qs.set("territory_id", t);
+  if (s) qs.set("specialty", s);
+  const data = await getJSON("/api/prescribers?" + qs);
+  document.getElementById("table-wrap").innerHTML = `
+    <p class="note" style="margin:0 0 .6rem">${num(data.total)} prescribers match · showing top ${data.prescribers.length}</p>
+    <table><thead><tr><th>Prescriber</th><th>Specialty</th><th>City</th>
+    <th>Decile</th><th class="num">Claims</th><th class="num">Spend</th></tr></thead><tbody>
+    ${data.prescribers.map(p => `<tr>
+      <td>${p.prescriber_name}<br><span class="note">NPI ${p.npi}</span></td>
+      <td>${p.specialty}</td><td>${p.city}, ${p.state}</td>
+      <td>${decileStrip(p.decile)}</td>
+      <td class="num">${num(p.claims)}</td>
+      <td class="num">${money(p.drug_cost)}</td></tr>`).join("")}
+    </tbody></table>`;
+}
+
+["f-territory","f-specialty","f-decile"].forEach(id =>
+  document.getElementById(id).addEventListener("change", () =>
+    load().catch(console.error)));
+
+initFilters().then(load).catch(e => {
+  document.getElementById("table-wrap").innerHTML =
+    `<p class="note">Could not load data (${e.message}).</p>`;
+});
+</script>
+{% endblock %}

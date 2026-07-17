@@ -1,0 +1,9 @@
+# One-click deploy config for Render (free tier).
+# Build generates the sample warehouse so the app boots with data.
+services:
+  - type: web
+    name: pharma-commercial-intelligence
+    runtime: python
+    buildCommand: pip install -r requirements.txt && python etl/generate_sample_data.py && python etl/load_data.py
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
