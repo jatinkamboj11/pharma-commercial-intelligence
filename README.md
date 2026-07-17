@@ -2,6 +2,14 @@
 
 **Territory analytics, prescriber deciling and call-plan simulation — delivered as a working product, not a notebook.**
 
+## The platform in action
+
+![Territory overview](overview.png)
+
+![Call-plan simulator — 60 calls cover 88% of territory claims](simulator.png)
+
+![Prescriber targeting with decile heat strips](targeting.png)
+
 ## The business problem
 
 Pharma sales forces are expensive, and prescription volume is heavily concentrated: in this dataset the **top 3 prescriber deciles drive ~74% of all claim volume**. A rep who spreads calls evenly wastes most of their effort on prescribers who barely prescribe. Commercial teams solve this with *deciling* — ranking prescribers 1–10 by volume and pointing rep effort at the top — and with territory-level performance tracking to see where the strategy is working.
